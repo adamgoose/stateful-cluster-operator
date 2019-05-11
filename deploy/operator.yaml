@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stateful-cluster-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: stateful-cluster-operator
+  template:
+    metadata:
+      labels:
+        name: stateful-cluster-operator
+    spec:
+      serviceAccountName: stateful-cluster-operator
+      containers:
+        - name: stateful-cluster-operator
+          # Replace this with the built image name
+          image: REPLACE_IMAGE
+          command:
+          - stateful-cluster-operator
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "stateful-cluster-operator"
