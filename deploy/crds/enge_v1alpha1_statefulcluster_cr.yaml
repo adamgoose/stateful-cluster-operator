@@ -1,0 +1,7 @@
+apiVersion: enge.me/v1alpha1
+kind: StatefulCluster
+metadata:
+  name: example-statefulcluster
+spec:
+  # Add fields here
+  replicas: 3
