@@ -2,10 +2,12 @@ package statefulcluster
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	engev1alpha1 "github.com/adamgoose/stateful-cluster-operator/pkg/apis/enge/v1alpha1"
-	"github.com/davecgh/go-spew/spew"
 
+	"github.com/thanhpk/randstr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,8 +120,6 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	spew.Dump(pods.Items)
-
 	// TODO:
 	//   - If unhealthy, delete one
 	//   - If creating, return and wait
@@ -130,7 +130,21 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 	}
 	if len(pods.Items) < desiredReplicas {
 		// TODO: Create volumes too
-		pod := newPodForCR(instance)
+		pod, pvcs := newPodForCR(instance)
+
+		for _, pvc := range pvcs {
+			// Set StatefulCluster instance as the owner and controller
+			if err := controllerutil.SetControllerReference(instance, pvc, r.scheme); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			reqLogger.Info("Creating a new PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+			err = r.client.Create(context.TODO(), pvc)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+
 		// Set StatefulCluster instance as the owner and controller
 		if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
 			return reconcile.Result{}, err
@@ -142,8 +156,9 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 			return reconcile.Result{}, err
 		}
 
-		// Pod created successfully - requeue
-		return reconcile.Result{Requeue: true}, nil
+		time.Sleep(5 * time.Second)
+		// Pod created successfully - don't requeue
+		return reconcile.Result{}, nil
 	}
 
 	return reconcile.Result{}, nil
@@ -178,14 +193,45 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 }
 
 // newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *engev1alpha1.StatefulCluster) *corev1.Pod {
+func newPodForCR(cr *engev1alpha1.StatefulCluster) (*corev1.Pod, map[string]*corev1.PersistentVolumeClaim) {
+	iteration := randstr.Hex(8)
 	labels := cr.Spec.Selector.MatchLabels
+
+	podVols := []corev1.Volume{}
+	pvcs := map[string]*corev1.PersistentVolumeClaim{}
+	for _, pvct := range cr.Spec.VolumeClaimTemplates {
+		pvcs[pvct.Name] = &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s-%s", cr.Name, pvct.Name, iteration),
+				Namespace: cr.Namespace,
+				Labels:    labels,
+			},
+			Spec: pvct.Spec,
+		}
+		podVols = append(podVols, corev1.Volume{
+			Name: pvct.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: fmt.Sprintf("%s-%s-%s", cr.Name, pvct.Name, iteration),
+					ReadOnly:  false,
+				},
+			},
+		})
+	}
+
+	cr.Spec.Template.Spec.Volumes = podVols
+	// for _, container := range cr.Spec.Template.Spec.Containers {
+	// 	for _, vm := range container.VolumeMounts {
+	// 		vm.Name = pvcs[vm.Name].Name
+	// 	}
+	// }
+
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
+			Name:      fmt.Sprintf("%s-%s", cr.Name, iteration),
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
 		Spec: cr.Spec.Template.Spec,
-	}
+	}, pvcs
 }
