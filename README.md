@@ -13,12 +13,13 @@ The Stateful Cluster Operator is a custom Kubernetes controller that implements 
 kubectl create namespace stateful-cluster-operator
 
 # Create ServiceAccount, Role, and RoleBinding
-kubectl apply --namespace stateful-cluster-operator -f https://github.com/adamgoose/stateful-cluster-operator/blob/master/deploy/service_account.yaml
-kubectl apply --namespace stateful-cluster-operator -f https://github.com/adamgoose/stateful-cluster-operator/blob/master/deploy/role.yaml
-kubectl apply --namespace stateful-cluster-operator -f https://github.com/adamgoose/stateful-cluster-operator/blob/master/deploy/role_binding.yaml
+kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/service_account.yaml
+kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/role.yaml
+kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/role_binding.yaml
 
 # Deploy the Operator
-kubectl apply --namespace stateful-cluster-operator -f https://github.com/adamgoose/stateful-cluster-operator/blob/master/deploy/operator.yaml
+kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/crds/enge_v1alpha1_statefulcluster_crd.yaml
+kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/operator.yaml
 ```
 
 ## Background
@@ -53,7 +54,7 @@ kind: StatefulCluster
 metadata:
   name: coder
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: coder
