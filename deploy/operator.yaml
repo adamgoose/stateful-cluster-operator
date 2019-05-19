@@ -16,7 +16,7 @@ spec:
       containers:
         - name: stateful-cluster-operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: adamgoose/stateful-cluster-operator
           command:
           - stateful-cluster-operator
           imagePullPolicy: Always

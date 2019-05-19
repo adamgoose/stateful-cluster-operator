@@ -24,11 +24,6 @@ import (
 
 var log = logf.Log.WithName("controller_statefulcluster")
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 // Add creates a new StatefulCluster Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -79,27 +74,15 @@ type ReconcileStatefulCluster struct {
 
 // Reconcile reads that state of the cluster for a StatefulCluster object and makes changes based on the state read
 // and what is in the StatefulCluster.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-
-	// Reconcile Strategy
-	// - Fetch CRD
-	// - Fetch Pods, foreach
-	//   - If unhealthy, delete one
-	//   - If creating, return and wait
-	// - If too many, delete one
-	// - If not enough, create one
-
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling StatefulCluster")
 
 	// Fetch the StatefulCluster instance
-	instance := &engev1alpha1.StatefulCluster{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	instance, err := r.getStatefulCluster(request.NamespacedName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -112,33 +95,53 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 	}
 
 	// Fetch owned Pod instances
-	pods := &corev1.PodList{}
-	listOpts := &client.ListOptions{Namespace: request.Namespace}
-	listOpts.MatchingLabels(instance.Spec.Selector.MatchLabels)
-	err = r.client.List(context.TODO(), listOpts, pods)
+	pods, err := r.getStatefulClusterPods(request.NamespacedName, instance.Spec.Selector.MatchLabels)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-
-	// TODO:
-	//   - If unhealthy, delete one
-	//   - If creating, return and wait
 
 	desiredReplicas := 1
 	if instance.Spec.Replicas != nil {
 		desiredReplicas = int(*instance.Spec.Replicas)
 	}
+
+	// If too many, delete one
+	if len(pods.Items) > desiredReplicas {
+		// delete one
+		pod := pods.Items[len(pods.Items)-1]
+		reqLogger.Info("Deleting unnecessary pod", "Pod.Name", pod.Name)
+		return reconcile.Result{}, r.client.Delete(context.TODO(), &pod)
+	}
+
+	// Check pod states
+	for _, pod := range pods.Items {
+		// If creating, return and wait
+		if pod.Status.Phase == corev1.PodPending {
+			return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
+		}
+
+		// If unhealthy, delete?
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionFalse {
+				// delete the pod, but not PVCs
+				reqLogger.Info("Deleting Unhealthy Pod", "Pod.Name", pod.Name)
+				return reconcile.Result{}, r.client.Delete(context.TODO(), &pod)
+			}
+		}
+	}
+
+	// If not enough, create one
 	if len(pods.Items) < desiredReplicas {
-		// TODO: Create volumes too
 		pod, pvcs := newPodForCR(instance)
 
+		// Create PVCs
 		for _, pvc := range pvcs {
 			// Set StatefulCluster instance as the owner and controller
 			if err := controllerutil.SetControllerReference(instance, pvc, r.scheme); err != nil {
 				return reconcile.Result{}, err
 			}
 
-			reqLogger.Info("Creating a new PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+			reqLogger.Info("Creating a new PVC", "PVC.Name", pvc.Name)
 			err = r.client.Create(context.TODO(), pvc)
 			if err != nil {
 				return reconcile.Result{}, err
@@ -150,7 +153,8 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 			return reconcile.Result{}, err
 		}
 
-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
+		// Create Pod
+		reqLogger.Info("Creating a new Pod", "Pod.Name", pod.Name)
 		err = r.client.Create(context.TODO(), pod)
 		if err != nil {
 			return reconcile.Result{}, err
@@ -162,34 +166,6 @@ func (r *ReconcileStatefulCluster) Reconcile(request reconcile.Request) (reconci
 	}
 
 	return reconcile.Result{}, nil
-
-	// // Define a new Pod object
-	// pod := newPodForCR(instance)
-
-	// // Set StatefulCluster instance as the owner and controller
-	// if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
-	// 	return reconcile.Result{}, err
-	// }
-
-	// // Check if this Pod already exists
-	// found := &corev1.Pod{}
-	// err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
-	// if err != nil && errors.IsNotFound(err) {
-	// 	reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-	// 	err = r.client.Create(context.TODO(), pod)
-	// 	if err != nil {
-	// 		return reconcile.Result{}, err
-	// 	}
-
-	// 	// Pod created successfully - don't requeue
-	// 	return reconcile.Result{}, nil
-	// } else if err != nil {
-	// 	return reconcile.Result{}, err
-	// }
-
-	// // Pod already exists - don't requeue
-	// reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
-	// return reconcile.Result{}, nil
 }
 
 // newPodForCR returns a busybox pod with the same name/namespace as the cr
@@ -220,11 +196,6 @@ func newPodForCR(cr *engev1alpha1.StatefulCluster) (*corev1.Pod, map[string]*cor
 	}
 
 	cr.Spec.Template.Spec.Volumes = podVols
-	// for _, container := range cr.Spec.Template.Spec.Containers {
-	// 	for _, vm := range container.VolumeMounts {
-	// 		vm.Name = pvcs[vm.Name].Name
-	// 	}
-	// }
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
