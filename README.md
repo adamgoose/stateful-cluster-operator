@@ -1,5 +1,7 @@
 # StatefulCluster Operator
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/adamgoose/stateful-cluster-operator.svg?style=for-the-badge)](https://hub.docker.com/r/adamgoose/stateful-cluster-operator)
+
 The Stateful Cluster Operator is a custom Kubernetes controller that implements the v1.StatefulSet interface, but implements slightly different logic when it comes to replicating your pods.
 
 ## Installation
