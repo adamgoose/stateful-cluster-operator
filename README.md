@@ -51,7 +51,6 @@ StatefulClusters are Kubernetes Custom Resource Definitions that implement the `
 apiVersion: enge.me/v1alpha1
 kind: StatefulCluster
 metadata:
-  annotations:
   name: coder
 spec:
   replicas: 1
