@@ -1,0 +1,12 @@
+#!/bin/bash
+
+. demo-magic.sh -d -n
+clear
+
+pe "kubectl create namespace stateful-cluster-operator"
+pe "kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/service_account.yaml"
+pe "kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/role.yaml"
+pe "kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/role_binding.yaml"
+pe "kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/crds/enge_v1alpha1_statefulcluster_crd.yaml"
+pe "kubectl apply --namespace stateful-cluster-operator -f https://raw.githubusercontent.com/adamgoose/stateful-cluster-operator/master/deploy/operator.yaml"
+pe "kubectl get --namespace stateful-cluster-operator po -w"

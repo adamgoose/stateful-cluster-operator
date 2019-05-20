@@ -1,0 +1,9 @@
+#!/bin/bash
+
+. demo-magic.sh
+clear
+
+pe "kubectl --namespace stateful-cluster-operator create -f ./deploy/crds/enge_v1alpha1_statefulcluster_cr.yaml"
+pe "kubectl --namespace stateful-cluster-operator get po -w"
+# pe "kubectl --namespace stateful-cluster-operator patch statefulcluster coder -p '{\"spec\":{\"replicas\":2}}'"
+# pe "kubectl --namespace stateful-cluster-operator get po -w"
